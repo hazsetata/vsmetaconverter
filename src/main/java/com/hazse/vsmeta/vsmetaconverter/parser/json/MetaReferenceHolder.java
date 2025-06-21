@@ -1,4 +1,4 @@
-package com.hazse.vsmeta.vsmetaconverter.model;
+package com.hazse.vsmeta.vsmetaconverter.parser.json;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Builder;
