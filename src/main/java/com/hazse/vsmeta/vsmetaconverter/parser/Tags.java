@@ -37,6 +37,7 @@ public class Tags {
     static final int TAG2_TVSHOW_META_JSON = 0x4A;
     static final int TAG2_GROUP3 = 0x52;
 
+    static final int TAG_GROUP3 = 0xAA;
     static final int TAG3_BACKDROP_DATA = 0x0a;
     static final int TAG3_BACKDROP_MD5 = 0x12;
     static final int TAG3_TIMESTAMP = 0x18;

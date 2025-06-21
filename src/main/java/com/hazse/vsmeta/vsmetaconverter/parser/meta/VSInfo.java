@@ -2,7 +2,7 @@ package com.hazse.vsmeta.vsmetaconverter.parser.meta;
 
 import java.util.Date;
 
-public class Info {
+public class VSInfo {
     public String showTitle = "";
     public String showTitle2 = null;
     public String episodeTitle = "";

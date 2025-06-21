@@ -1,6 +1,6 @@
 package com.hazse.vsmeta.vsmetaconverter.parser;
 
-import com.hazse.vsmeta.vsmetaconverter.parser.meta.Info;
+import com.hazse.vsmeta.vsmetaconverter.parser.meta.VSInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.springframework.stereotype.Component;
@@ -23,20 +23,20 @@ import static com.hazse.vsmeta.vsmetaconverter.parser.Tags.*;
 public class VsmetaParser {
     private final SimpleDateFormat FORMAT_DATE = new SimpleDateFormat("yyyy-MM-dd");
 
-    public Info readVsMeta(File that) {
-        return parse(new MemorySyncStream(fileReadAll(that)), new Info());
+    public VSInfo readVsMeta(File that) {
+        return parse(new MemorySyncStream(fileReadAll(that)), new VSInfo());
     }
 
-    public Info readVsMeta(InputStream that) {
+    public VSInfo readVsMeta(InputStream that) {
         try {
-            return parse(new MemorySyncStream(IOUtils.toByteArray(that)), new Info());
+            return parse(new MemorySyncStream(IOUtils.toByteArray(that)), new VSInfo());
         }
         catch (IOException e) {
             throw new VsmetaParserException("Error parsing input stream", e);
         }
     }
 
-    private Info parse(SyncStream s, Info info) {
+    private VSInfo parse(SyncStream s, VSInfo info) {
         int magic = s.readU8();
         int type = s.readU8();
 
@@ -109,6 +109,13 @@ public class VsmetaParser {
                     parseGroup2(openSync(data), info, (int) pos2);
                     break;
                 }
+                case TAG_GROUP3: {
+                    int dataSize = s.readU_VL_Int();
+                    long pos2 = s.position();
+                    byte[] data = s.readBytes(dataSize);
+                    parseGroup3(openSync(data), info, (int) pos2);
+                    break;
+                }
                 default:
                     throw new VsmetaParserException("[MAIN] Unexpected kind=" + kind + " at position=" + pos);
             }
@@ -117,7 +124,7 @@ public class VsmetaParser {
         return info;
     }
 
-    private SyncStream parseGroup1(SyncStream s, Info info) {
+    private SyncStream parseGroup1(SyncStream s, VSInfo info) {
         while (!s.eof()) {
             long pos = s.position();
             int kind = s.readU_VL_Int();
@@ -143,7 +150,7 @@ public class VsmetaParser {
         return s;
     }
 
-    private SyncStream parseGroup2(SyncStream s, Info info, int start) {
+    private SyncStream parseGroup2(SyncStream s, VSInfo info, int start) {
         while (!s.eof()) {
             long pos = s.position();
             int kind = s.readU_VL_Int();
@@ -198,7 +205,7 @@ public class VsmetaParser {
         return s;
     }
 
-    private SyncStream parseGroup3(SyncStream s, Info info, int start) {
+    private SyncStream parseGroup3(SyncStream s, VSInfo info, int start) {
         while (!s.eof()) {
             long pos = s.position();
             int kind = s.readU_VL_Int();
