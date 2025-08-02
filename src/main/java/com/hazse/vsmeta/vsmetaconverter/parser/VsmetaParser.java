@@ -9,8 +9,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Base64;
@@ -21,10 +19,15 @@ import static com.hazse.vsmeta.vsmetaconverter.parser.Tags.*;
 @Component
 @Slf4j
 public class VsmetaParser {
-    private final SimpleDateFormat FORMAT_DATE = new SimpleDateFormat("yyyy-MM-dd");
+    private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 
     public VSInfo readVsMeta(File that) {
-        return parse(new MemorySyncStream(fileReadAll(that)), new VSInfo());
+        try (FileInputStream fis = new FileInputStream(that)) {
+            return readVsMeta(fis);
+        }
+        catch (Exception e) {
+            throw new VsmetaParserException("File reading failed for: " + that.getAbsolutePath(), e);
+        }
     }
 
     public VSInfo readVsMeta(InputStream that) {
@@ -42,9 +45,9 @@ public class VsmetaParser {
 
         if (magic != 0x08) throw new VsmetaParserException("Not a vsmeta file");
         switch (type) {
-            case 0x01: log.info("    vsmeta file represents movie information"); info.movie = true; break;
-            case 0x02: log.info("    vsmeta file represents tv-episode information"); info.movie = false; break;
-            default: throw new VsmetaParserException("    Unsupported vsmeta file type: " + type);
+            case 0x01: log.info("File represents movie information"); info.movie = true; break;
+            case 0x02: log.info("File represents tv-episode information"); info.movie = false; break;
+            default: throw new VsmetaParserException("Unsupported vsmeta file type: " + type);
         }
 
         while (!s.eof()) {
@@ -67,7 +70,7 @@ public class VsmetaParser {
                     String releaseDate = s.readStringVL();
 
                     try {
-                        info.episodeReleaseDate = FORMAT_DATE.parse(releaseDate);
+                        info.episodeReleaseDate = dateFormat.parse(releaseDate);
                     }
                     catch (ParseException e) {
                         log.warn("Couldn't parse {} into a release date", releaseDate);
@@ -100,7 +103,8 @@ public class VsmetaParser {
                     info.images.episodeImage = fromBase64IgnoreSpaces(s.readStringVL());
                     break;
                 case TAG_EPISODE_THUMB_MD5:
-                    assert (hex(md5(info.images.episodeImage)).equals(s.readStringVL()));
+                    // We will ignore this MD5 hash, but the value must be read from the stream
+                    s.readStringVL();
                     break;
                 case TAG_GROUP2: {
                     int dataSize = s.readU_VL_Int();
@@ -124,7 +128,7 @@ public class VsmetaParser {
         return info;
     }
 
-    private SyncStream parseGroup1(SyncStream s, VSInfo info) {
+    private void parseGroup1(SyncStream s, VSInfo info) {
         while (!s.eof()) {
             long pos = s.position();
             int kind = s.readU_VL_Int();
@@ -147,10 +151,9 @@ public class VsmetaParser {
             }
         }
 
-        return s;
     }
 
-    private SyncStream parseGroup2(SyncStream s, VSInfo info, int start) {
+    private void parseGroup2(SyncStream s, VSInfo info, int start) {
         while (!s.eof()) {
             long pos = s.position();
             int kind = s.readU_VL_Int();
@@ -169,7 +172,7 @@ public class VsmetaParser {
                     String releaseDate = s.readStringVL();
 
                     try {
-                        info.tvshowReleaseDate = FORMAT_DATE.parse(releaseDate);
+                        info.tvshowReleaseDate = dateFormat.parse(releaseDate);
                     } catch (ParseException e) {
                         log.warn("Couldn't parse {} into a tv-show release date", releaseDate);
                     }
@@ -185,7 +188,8 @@ public class VsmetaParser {
                     info.images.tvshowPoster = fromBase64IgnoreSpaces(s.readStringVL());
                     break;
                 case TAG2_POSTER_MD5:
-                    assert (s.readStringVL().equals(hex(md5(info.images.tvshowPoster))));
+                    // We will ignore this MD5 hash, but the value must be read from the stream
+                    s.readStringVL();
                     break;
                 case TAG2_TVSHOW_META_JSON:
                     info.tagTvshowMetaJson = s.readStringVL();
@@ -202,10 +206,9 @@ public class VsmetaParser {
                     throw new VsmetaParserException("[GROUP2] Unexpected kind=" + kind + " at position=" + (start + pos));
             }
         }
-        return s;
     }
 
-    private SyncStream parseGroup3(SyncStream s, VSInfo info, int start) {
+    private void parseGroup3(SyncStream s, VSInfo info, int start) {
         while (!s.eof()) {
             long pos = s.position();
             int kind = s.readU_VL_Int();
@@ -215,7 +218,8 @@ public class VsmetaParser {
                     info.images.tvshowBackdrop = fromBase64IgnoreSpaces(s.readStringVL());
                     break;
                 case TAG3_BACKDROP_MD5:
-                    assert (s.readStringVL().equals(hex(md5(info.images.tvshowBackdrop))));
+                    // We will ignore this MD5 hash, but the value must be read from the stream
+                    s.readStringVL();
                     break;
                 case TAG3_TIMESTAMP:
                     info.timestamp = new Date(s.readU_VL_Long() * 1000L);
@@ -225,16 +229,6 @@ public class VsmetaParser {
             }
         }
 
-        return s;
-    }
-
-    private byte[] fileReadAll(File file) {
-        try (FileInputStream fis = new FileInputStream(file)) {
-            return IOUtils.toByteArray(fis);
-        }
-        catch (Exception e) {
-            throw new VsmetaParserException("File reading failed for: " + file.getAbsolutePath(), e);
-        }
     }
 
     private SyncStream openSync(byte[] data) {
@@ -243,27 +237,5 @@ public class VsmetaParser {
 
     private byte[] fromBase64IgnoreSpaces(String str) {
         return Base64.getDecoder().decode(str.replaceAll("\\s+", ""));
-    }
-
-    private byte[] md5(byte[] data) {
-        try {
-            if (data == null) data = new byte[0];
-            return MessageDigest.getInstance("MD5").digest(data);
-        }
-        catch (NoSuchAlgorithmException e) {
-            throw new VsmetaParserException("Digest algorithm MD5 missing");
-        }
-    }
-
-    @SuppressWarnings("PointlessArithmeticExpression")
-    private String hex(byte[] data) {
-        final String chars = "0123456789abcdef";
-        char[] out = new char[data.length * 2];
-        for (int n = 0; n < data.length; n++) {
-            int v = data[n];
-            out[n * 2 + 0] = chars.charAt((v >> 4) & 0xF);
-            out[n * 2 + 1] = chars.charAt((v >> 0) & 0xF);
-        }
-        return new String(out);
     }
 }
