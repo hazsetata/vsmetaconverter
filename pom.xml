@@ -6,12 +6,12 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>3.5.3</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <relativePath/>
     </parent>
 
     <groupId>com.hazse.vsmeta</groupId>
     <artifactId>vsmetaconverter</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0</version>
 
     <name>vsmetaconverter</name>
     <description>Converts Synology VideoStation's vsmeta files to simple nfo files to be consumed by Emby.</description>

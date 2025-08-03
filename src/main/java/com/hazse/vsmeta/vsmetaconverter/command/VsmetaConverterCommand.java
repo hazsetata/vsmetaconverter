@@ -3,6 +3,7 @@ package com.hazse.vsmeta.vsmetaconverter.command;
 import com.hazse.vsmeta.vsmetaconverter.generator.NfoGeneratorService;
 import com.hazse.vsmeta.vsmetaconverter.parser.VsmetaParser;
 import com.hazse.vsmeta.vsmetaconverter.parser.meta.VSInfo;
+import com.hazse.vsmeta.vsmetaconverter.utils.FileNameUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -16,6 +17,8 @@ import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 
+import static com.hazse.vsmeta.vsmetaconverter.utils.FileNameUtils.isAllowedFile;
+
 @Component
 @CommandLine.Command(name = "vsmeta")
 @RequiredArgsConstructor
@@ -24,9 +27,6 @@ public class VsmetaConverterCommand implements Callable<Integer> {
     public static final int EXECUTION_OK = 0;
     public static final int ERROR_INPUT_FILE_DOESNT_EXIST = 1;
     public static final int ERROR_INPUT_FILE_NOT_VSMETA = 2;
-
-    public static final String VSMETA_EXTENSION = ".vsmeta";
-    public static final String NFO_EXTENSION = ".nfo";
 
     private final VsmetaParser vsmetaParser;
     private final NfoGeneratorService nfoGeneratorService;
@@ -55,10 +55,6 @@ public class VsmetaConverterCommand implements Callable<Integer> {
     )
     boolean forceOverwrite = false;
 
-    private static boolean isVsMetaFile(File dir, String fileName) {
-        return fileName.endsWith(VSMETA_EXTENSION);
-    }
-
     @Override
     public Integer call() throws Exception {
         log.info("Vsmeta Converter Command");
@@ -67,11 +63,12 @@ public class VsmetaConverterCommand implements Callable<Integer> {
             log.error("Input file does not exist: {}", inputFile.getAbsolutePath());
             return ERROR_INPUT_FILE_DOESNT_EXIST;
         }
-        else if (inputFile.isFile() && !inputFile.getName().endsWith(VSMETA_EXTENSION)) {
-            log.error("Input file is not a '.vsmeta' file: {}", inputFile.getAbsolutePath());
+        else if (!isAllowedFile(inputFile)) {
+            log.error("Input file needs to be a directory or a '.vsmeta' file.");
             return ERROR_INPUT_FILE_NOT_VSMETA;
         }
         else {
+            long processedCount = 0;
             Queue<File> filesToProcess = new ArrayDeque<>();
             filesToProcess.offer(inputFile);
 
@@ -79,16 +76,18 @@ public class VsmetaConverterCommand implements Callable<Integer> {
                 File file = filesToProcess.poll();
 
                 if (file.isDirectory()) {
-                    log.info("Processing directory: {} (still to process: {})", file.getAbsolutePath(), filesToProcess.size());
-                    File[] directoryFiles = file.listFiles(VsmetaConverterCommand::isVsMetaFile);
+                    log.info("Processing directory: {}", file.getAbsolutePath());
+                    File[] directoryFiles = file.listFiles();
                     if (directoryFiles != null) {
                         for (File childFile : directoryFiles) {
-                            filesToProcess.offer(childFile);
+                            if (isAllowedFile(childFile)) {
+                                filesToProcess.offer(childFile);
+                            }
                         }
                     }
                 }
                 else {
-                    log.info("Processing file: {} (still to process: {})", file.getAbsolutePath(), filesToProcess.size());
+                    log.info("Processing file: {}", file.getAbsolutePath());
                     try {
                         VSInfo vsInfo = vsmetaParser.readVsMeta(file);
                         String nfoContent = nfoGeneratorService.generateNfo(vsInfo);
@@ -109,6 +108,9 @@ public class VsmetaConverterCommand implements Callable<Integer> {
                         log.error("Failed to process file: {} - error: {}", file.getAbsolutePath(), e.getMessage());
                     }
                 }
+
+                processedCount++;
+                log.info("Processed {} / remaining: {}", processedCount, filesToProcess.size());
             }
         }
 
@@ -116,10 +118,7 @@ public class VsmetaConverterCommand implements Callable<Integer> {
     }
 
     private void saveNfoContent(String nfoContent, File file) throws IOException {
-        String originalName = file.getName();
-
-        String nfoFileName = originalName.substring(0, originalName.lastIndexOf(VSMETA_EXTENSION)) + NFO_EXTENSION;
-        File nfoFile = new File(file.getParentFile(), nfoFileName);
+        File nfoFile = new File(file.getParentFile(), FileNameUtils.getNfoFileNameFor(file));
 
         if (nfoFile.exists() && !forceOverwrite) {
             log.warn("NFO file already exists and force-overwrite is disabled: {}", nfoFile.getAbsolutePath());
